@@ -115,6 +115,49 @@ def add_ticket(room_id: str, ticket_id: str, title: str) -> dict | None:
         return room
 
 
+def update_ticket(room_id: str, ticket_uuid: str, title: str) -> dict | None:
+    with _lock:
+        data = _read()
+        room = data.get(room_id)
+        if not room:
+            return None
+        for t in room.get("tickets", []):
+            if t["id"] == ticket_uuid:
+                t["title"] = title
+                break
+        else:
+            return None
+        _write(data)
+        return room
+
+
+def clear_tickets(room_id: str) -> dict | None:
+    with _lock:
+        data = _read()
+        room = data.get(room_id)
+        if not room:
+            return None
+        room["tickets"] = []
+        _write(data)
+        return room
+
+
+def reorder_tickets(room_id: str, ordered_ids: list) -> dict | None:
+    with _lock:
+        data = _read()
+        room = data.get(room_id)
+        if not room:
+            return None
+        by_id = {t["id"]: t for t in room.get("tickets", [])}
+        reordered = [by_id[i] for i in ordered_ids if i in by_id]
+        # Append any tickets not mentioned at the end
+        mentioned = set(ordered_ids)
+        reordered += [t for t in room["tickets"] if t["id"] not in mentioned]
+        room["tickets"] = reordered
+        _write(data)
+        return room
+
+
 def remove_ticket(room_id: str, ticket_uuid: str) -> dict | None:
     with _lock:
         data = _read()

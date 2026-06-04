@@ -44,7 +44,13 @@ def create():
     room_id = _generate_room_id()
     admin_token = str(uuid.uuid4())
     db.create_room(room_id, admin_token)
-    return jsonify({"roomId": room_id, "adminToken": admin_token})
+    base = request.host_url.rstrip("/")
+    return jsonify({
+        "roomId":    room_id,
+        "adminToken": admin_token,
+        "roomUrl":   f"{base}/poker/room/{room_id}",
+        "adminUrl":  f"{base}/poker/room/{room_id}?token={admin_token}",
+    })
 
 
 @poker_bp.route("/room/<room_id>")
@@ -53,6 +59,109 @@ def room(room_id):
     if not room_data:
         return redirect(url_for("poker.home"))
     return render_template("poker/room.html", room_id=room_id, fibonacci=FIBONACCI)
+
+
+def _get_admin_token():
+    return (
+        request.args.get("adminToken")
+        or request.headers.get("X-Admin-Token")
+        or (request.get_json(silent=True) or {}).get("adminToken")
+    )
+
+
+def _check_admin(room):
+    token = _get_admin_token()
+    return token and room and room["adminToken"] == token
+
+
+@poker_bp.route("/api/room/<room_id>/tickets", methods=["GET"])
+def api_get_tickets(room_id):
+    room_data = db.get_room(room_id)
+    if not room_data:
+        return jsonify({"error": "Room not found"}), 404
+    return jsonify({"tickets": room_data.get("tickets", [])})
+
+
+@poker_bp.route("/api/room/<room_id>/tickets/<ticket_uuid>", methods=["PATCH"])
+def api_update_ticket(room_id, ticket_uuid):
+    room_data = db.get_room(room_id)
+    if not room_data:
+        return jsonify({"error": "Room not found"}), 404
+    if not _check_admin(room_data):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "title is required"}), 400
+
+    room_data = db.update_ticket(room_id, ticket_uuid, title)
+    if not room_data:
+        return jsonify({"error": "Ticket not found"}), 404
+
+    sio = poker_bp.extensions["socketio"]
+    sio.emit("room_state", _safe_room(room_data, show_votes=room_data["revealed"]), to=room_id)
+    ticket = next(t for t in room_data["tickets"] if t["id"] == ticket_uuid)
+    return jsonify({"ticket": ticket})
+
+
+@poker_bp.route("/api/room/<room_id>/tickets", methods=["DELETE"])
+def api_clear_tickets(room_id):
+    room_data = db.get_room(room_id)
+    if not room_data:
+        return jsonify({"error": "Room not found"}), 404
+    if not _check_admin(room_data):
+        return jsonify({"error": "Unauthorized"}), 403
+    room_data = db.clear_tickets(room_id)
+    sio = poker_bp.extensions["socketio"]
+    sio.emit("room_state", _safe_room(room_data, show_votes=room_data["revealed"]), to=room_id)
+    return jsonify({"cleared": True})
+
+
+@poker_bp.route("/api/room/<room_id>/tickets/reorder", methods=["POST"])
+def api_reorder_tickets(room_id):
+    room_data = db.get_room(room_id)
+    if not room_data:
+        return jsonify({"error": "Room not found"}), 404
+    if not _check_admin(room_data):
+        return jsonify({"error": "Unauthorized"}), 403
+    data = request.get_json(silent=True) or {}
+    ordered_ids = data.get("ids", [])
+    if not ordered_ids:
+        return jsonify({"error": "ids is required"}), 400
+    room_data = db.reorder_tickets(room_id, ordered_ids)
+    sio = poker_bp.extensions["socketio"]
+    sio.emit("room_state", _safe_room(room_data, show_votes=room_data["revealed"]), to=room_id)
+    return jsonify({"tickets": room_data["tickets"]})
+
+
+@poker_bp.route("/api/room/<room_id>/tickets/<ticket_uuid>/activate", methods=["PATCH"])
+def api_activate_ticket(room_id, ticket_uuid):
+    room_data = db.get_room(room_id)
+    if not room_data:
+        return jsonify({"error": "Room not found"}), 404
+    if not _check_admin(room_data):
+        return jsonify({"error": "Unauthorized"}), 403
+    room_data = db.set_active_ticket(room_id, ticket_uuid)
+    if not room_data:
+        return jsonify({"error": "Ticket not found"}), 404
+    sio = poker_bp.extensions["socketio"]
+    sio.emit("room_state", _safe_room(room_data, show_votes=room_data["revealed"]), to=room_id)
+    ticket = next(t for t in room_data["tickets"] if t["id"] == ticket_uuid)
+    return jsonify({"ticket": ticket})
+
+
+@poker_bp.route("/api/room/<room_id>/tickets/<ticket_uuid>", methods=["DELETE"])
+def api_delete_ticket(room_id, ticket_uuid):
+    room_data = db.get_room(room_id)
+    if not room_data:
+        return jsonify({"error": "Room not found"}), 404
+    room_data = db.remove_ticket(room_id, ticket_uuid)
+    if room_data is None:
+        return jsonify({"error": "Ticket not found"}), 404
+    sio = poker_bp.extensions["socketio"]
+    sio.emit("room_state", _safe_room(room_data, show_votes=room_data["revealed"]), to=room_id)
+    return jsonify({"deleted": ticket_uuid})
 
 
 @poker_bp.route("/api/room/<room_id>/tickets", methods=["POST"])

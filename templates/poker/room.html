@@ -248,6 +248,19 @@
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
   const ROOM_ID = {{ room_id | tojson }};
+
+  // Claim admin via ?token= URL param
+  (function() {
+    const p = new URLSearchParams(window.location.search);
+    const t = p.get('token');
+    if (t) {
+      localStorage.setItem(`adminToken_${ROOM_ID}`, t);
+      p.delete('token');
+      const clean = window.location.pathname + (p.toString() ? '?' + p.toString() : '');
+      history.replaceState(null, '', clean);
+    }
+  })();
+
   const adminToken = localStorage.getItem(`adminToken_${ROOM_ID}`) || null;
   let myName = localStorage.getItem(`name_${ROOM_ID}`) || '';
   let myVote = null;
