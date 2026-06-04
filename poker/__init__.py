@@ -198,6 +198,23 @@ def init_poker_socketio(socketio):
         if room:
             emit("room_state", _safe_room(room, show_votes=room["revealed"]), to=room_id)
 
+    @socketio.on("kick_participant")
+    def on_kick(data):
+        room_id = data.get("roomId")
+        admin_token = data.get("adminToken")
+        target_sid = data.get("targetSid")
+
+        room = db.get_room(room_id)
+        if not room or room["adminToken"] != admin_token:
+            return
+        if target_sid not in room.get("participants", {}):
+            return
+
+        room = db.remove_participant(room_id, target_sid)
+        socketio.emit("kicked", {}, to=target_sid)
+        if room:
+            emit("room_state", _safe_room(room, show_votes=room["revealed"]), to=room_id)
+
     @socketio.on("disconnect")
     def on_disconnect():
         sid = request.sid

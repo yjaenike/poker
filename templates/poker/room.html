@@ -317,6 +317,16 @@
         editBtn.className = 'p-edit-btn';
         editBtn.onclick = promptRename;
         nameRow.appendChild(editBtn);
+      } else if (adminToken) {
+        const kickBtn = document.createElement('button');
+        kickBtn.textContent = '×';
+        kickBtn.title = 'Remove from room';
+        kickBtn.className = 'p-edit-btn';
+        kickBtn.style.cssText = 'color:var(--text-muted);opacity:0.5;';
+        kickBtn.onmouseenter = () => { kickBtn.style.opacity = '1'; kickBtn.style.color = '#c0392b'; };
+        kickBtn.onmouseleave = () => { kickBtn.style.opacity = '0.5'; kickBtn.style.color = 'var(--text-muted)'; };
+        kickBtn.onclick = () => kickParticipant(sid);
+        nameRow.appendChild(kickBtn);
       }
 
       slot.appendChild(face);
@@ -524,5 +534,14 @@
   function setActiveTicket(id) {
     socket.emit('set_active_ticket', { roomId: ROOM_ID, id });
   }
+
+  function kickParticipant(targetSid) {
+    socket.emit('kick_participant', { roomId: ROOM_ID, adminToken, targetSid });
+  }
+
+  socket.on('kicked', () => {
+    alert('You have been removed from the room.');
+    window.location.href = '/poker';
+  });
 </script>
 {% endblock %}
