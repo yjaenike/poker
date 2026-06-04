@@ -36,6 +36,25 @@
     85%  { opacity: 1; }
     100% { transform: translateY(105vh) rotate(25deg) scale(0.85); opacity: 0; }
   }
+  .drag-handle {
+    cursor: grab;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    opacity: 0.35;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    padding: 0 2px;
+    user-select: none;
+  }
+  .ticket-item:hover .drag-handle { opacity: 0.75; }
+  .ticket-item.drag-src { opacity: 0.35; }
+  .ticket-drag-placeholder {
+    border-radius: 10px;
+    border: 2px dashed var(--amber);
+    background: var(--amber-glow);
+    height: 44px;
+    flex-shrink: 0;
+  }
   @keyframes loneWolfSlideUp {
     from { opacity: 0; transform: translateY(12px) scale(0.92); }
     to   { opacity: 1; transform: translateY(0)    scale(1); }
@@ -697,6 +716,12 @@
     }
   }
 
+  if (adminToken) {
+    const ticketList = document.getElementById('ticket-list');
+    ticketList.addEventListener('dragover', ticketListDragOver);
+    ticketList.addEventListener('drop',     ticketDrop);
+  }
+
   function renderTickets(tickets) {
     applyTicketEditMode();
 
@@ -717,8 +742,25 @@
       li.title   = t.active ? 'Click to deselect' : 'Click to set as active';
       li.onclick = () => setActiveTicket(t.active ? null : t.id);
 
+      if (adminToken) {
+        li.draggable = true;
+        li.dataset.ticketUuid = t.id;
+        li.addEventListener('dragstart', ticketDragStart);
+        li.addEventListener('dragover',  ticketDragOver);
+        li.addEventListener('drop',      ticketDrop);
+        li.addEventListener('dragend',   ticketDragEnd);
+      }
+
       const top = document.createElement('div');
       top.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:0.5rem;';
+
+      if (adminToken) {
+        const handle = document.createElement('span');
+        handle.className   = 'drag-handle';
+        handle.textContent = '⠿';
+        handle.onclick     = e => e.stopPropagation();
+        top.appendChild(handle);
+      }
 
       const link = document.createElement('a');
       link.href      = jiraUrl;
@@ -770,6 +812,61 @@
     document.getElementById('ticket-id-input').value    = '';
     document.getElementById('ticket-title-input').value = '';
     document.getElementById('ticket-id-input').focus();
+  }
+
+  let _dragSrc = null;
+  const _dragPlaceholder = document.createElement('li');
+  _dragPlaceholder.className = 'ticket-drag-placeholder';
+
+  function ticketDragStart(e) {
+    _dragSrc = this;
+    this.classList.add('drag-src');
+    e.dataTransfer.effectAllowed = 'move';
+    // Delay so the drag image captures the original before it fades
+    setTimeout(() => { if (_dragSrc) _dragSrc.classList.add('drag-src'); }, 0);
+  }
+
+  function ticketDragOver(e) {
+    if (!_dragSrc) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const list  = document.getElementById('ticket-list');
+    const rect  = this.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    if (after) {
+      this.after(_dragPlaceholder);
+    } else {
+      this.before(_dragPlaceholder);
+    }
+  }
+
+  // Keep placeholder alive when dragging over the list gap between items
+  function ticketListDragOver(e) {
+    if (!_dragSrc) return;
+    e.preventDefault();
+  }
+
+  function ticketDrop(e) {
+    e.stopPropagation();
+    if (!_dragSrc) return;
+    const list = document.getElementById('ticket-list');
+    if (_dragPlaceholder.parentNode === list) {
+      list.insertBefore(_dragSrc, _dragPlaceholder);
+      _dragPlaceholder.remove();
+    }
+    _dragSrc.classList.remove('drag-src');
+    _dragSrc = null;
+    const ids = [...list.querySelectorAll('li[data-ticket-uuid]')].map(li => li.dataset.ticketUuid);
+    fetch(`/poker/api/room/${ROOM_ID}/tickets/reorder?adminToken=${adminToken}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ids})
+    });
+  }
+
+  function ticketDragEnd() {
+    _dragPlaceholder.remove();
+    if (_dragSrc) { _dragSrc.classList.remove('drag-src'); _dragSrc = null; }
   }
 
   function removeTicket(id) {
