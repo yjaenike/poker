@@ -138,13 +138,18 @@
     const name = document.getElementById('create-name').value.trim();
     if (!name) { alert('Enter your name first.'); return; }
 
-    const res = await fetch('/poker/create', { method: 'POST' });
-    const { roomId, adminToken } = await res.json();
-
-    localStorage.setItem(`adminToken_${roomId}`, adminToken);
-    localStorage.setItem(`name_${roomId}`, name);
-    saveRecentRoom(roomId);
-    window.location.href = `/poker/room/${roomId}`;
+    try {
+      const res = await fetch('/poker/create', { method: 'POST' });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const { roomId, adminToken } = await res.json();
+      if (!roomId) throw new Error('Invalid response');
+      localStorage.setItem(`adminToken_${roomId}`, adminToken);
+      localStorage.setItem(`name_${roomId}`, name);
+      saveRecentRoom(roomId);
+      window.location.href = `/poker/room/${roomId}`;
+    } catch (e) {
+      alert('Could not create room — the server may be starting up. Please try again in a moment.');
+    }
   }
 
   function joinRoom() {
