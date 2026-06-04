@@ -39,17 +39,109 @@ def home():
     return render_template("poker/home.html")
 
 
+@poker_bp.route("/api/help", methods=["GET"])
+def api_help():
+    base = request.host_url.rstrip("/")
+    return jsonify({
+        "description": "Planning Poker API — set up and manage estimation sessions",
+        "auth": {
+            "description": "Admin endpoints require the room's adminToken.",
+            "methods": [
+                "Query param: ?adminToken=<token>",
+                "Header: X-Admin-Token: <token>",
+                "JSON body: {\"adminToken\": \"<token>\"}"
+            ],
+            "hint": "adminToken is returned when you POST /poker/create. Pass it in the adminUrl to give someone admin rights in the browser."
+        },
+        "typical_flow": [
+            "POST /poker/create → get roomId, adminToken, roomUrl, adminUrl",
+            "POST /poker/api/room/:id/tickets → bulk add tickets",
+            "POST /poker/api/room/:id/tickets/reorder → order by priority (admin)",
+            "PATCH /poker/api/room/:id/tickets/:uuid/activate → set first ticket active (admin)",
+            "Share roomUrl with team, open adminUrl yourself"
+        ],
+        "endpoints": [
+            {
+                "method": "GET", "path": "/poker/api/help",
+                "description": "This help document.",
+                "auth": False
+            },
+            {
+                "method": "POST", "path": "/poker/create",
+                "description": "Create a new room. Returns roomId, adminToken, roomUrl and adminUrl.",
+                "auth": False,
+                "returns": {
+                    "roomId": "6-char room code",
+                    "adminToken": "UUID — keep this to manage the room",
+                    "roomUrl": "Share this with participants",
+                    "adminUrl": "Open this to get admin rights in the browser"
+                }
+            },
+            {
+                "method": "GET", "path": "/poker/api/room/:id/tickets",
+                "description": "List all tickets in a room.",
+                "auth": False
+            },
+            {
+                "method": "POST", "path": "/poker/api/room/:id/tickets",
+                "description": "Add one or more tickets.",
+                "auth": False,
+                "body_single": {"ticketId": "ENG-123", "title": "Optional title"},
+                "body_bulk": {"tickets": [{"ticketId": "ENG-123", "title": "..."}]}
+            },
+            {
+                "method": "PATCH", "path": "/poker/api/room/:id/tickets/:uuid",
+                "description": "Update a ticket's title.",
+                "auth": True,
+                "body": {"title": "New title"}
+            },
+            {
+                "method": "DELETE", "path": "/poker/api/room/:id/tickets/:uuid",
+                "description": "Remove a single ticket.",
+                "auth": False
+            },
+            {
+                "method": "DELETE", "path": "/poker/api/room/:id/tickets",
+                "description": "Remove all tickets from the room.",
+                "auth": True
+            },
+            {
+                "method": "POST", "path": "/poker/api/room/:id/tickets/reorder",
+                "description": "Reorder tickets by providing an ordered array of ticket UUIDs. Unlisted tickets are appended at the end.",
+                "auth": True,
+                "body": {"ids": ["uuid1", "uuid2", "uuid3"]}
+            },
+            {
+                "method": "PATCH", "path": "/poker/api/room/:id/tickets/:uuid/activate",
+                "description": "Set a ticket as the currently active one being estimated.",
+                "auth": True
+            }
+        ],
+        "example": {
+            "create": f"curl -X POST {base}/poker/create",
+            "add_tickets": f"curl -X POST {base}/poker/api/room/ROOMID/tickets -H 'Content-Type: application/json' -d '{{\"tickets\":[{{\"ticketId\":\"ENG-1\",\"title\":\"My ticket\"}}]}}'",
+            "activate": f"curl -X PATCH '{base}/poker/api/room/ROOMID/tickets/UUID/activate?adminToken=TOKEN'"
+        }
+    })
+
+
 @poker_bp.route("/create", methods=["POST"])
 def create():
     room_id = _generate_room_id()
     admin_token = str(uuid.uuid4())
     db.create_room(room_id, admin_token)
     base = request.host_url.rstrip("/")
+    api  = f"{base}/poker/api/room/{room_id}"
     return jsonify({
-        "roomId":    room_id,
+        "roomId":     room_id,
         "adminToken": admin_token,
-        "roomUrl":   f"{base}/poker/room/{room_id}",
-        "adminUrl":  f"{base}/poker/room/{room_id}?token={admin_token}",
+        "roomUrl":    f"{base}/poker/room/{room_id}",
+        "adminUrl":   f"{base}/poker/room/{room_id}?token={admin_token}",
+        "_links": {
+            "help":     f"{base}/poker/api/help",
+            "tickets":  f"{api}/tickets",
+            "reorder":  f"{api}/tickets/reorder",
+        }
     })
 
 
@@ -88,7 +180,7 @@ def api_update_ticket(room_id, ticket_uuid):
     if not room_data:
         return jsonify({"error": "Room not found"}), 404
     if not _check_admin(room_data):
-        return jsonify({"error": "Unauthorized"}), 403
+        return jsonify({"error": "Unauthorized", "hint": "Pass adminToken via ?adminToken=, X-Admin-Token header, or JSON body. Get it from POST /poker/create."}), 403
 
     data = request.get_json(silent=True) or {}
     title = (data.get("title") or "").strip()
@@ -111,7 +203,7 @@ def api_clear_tickets(room_id):
     if not room_data:
         return jsonify({"error": "Room not found"}), 404
     if not _check_admin(room_data):
-        return jsonify({"error": "Unauthorized"}), 403
+        return jsonify({"error": "Unauthorized", "hint": "Pass adminToken via ?adminToken=, X-Admin-Token header, or JSON body. Get it from POST /poker/create."}), 403
     room_data = db.clear_tickets(room_id)
     sio = poker_bp.extensions["socketio"]
     sio.emit("room_state", _safe_room(room_data, show_votes=room_data["revealed"]), to=room_id)
@@ -124,7 +216,7 @@ def api_reorder_tickets(room_id):
     if not room_data:
         return jsonify({"error": "Room not found"}), 404
     if not _check_admin(room_data):
-        return jsonify({"error": "Unauthorized"}), 403
+        return jsonify({"error": "Unauthorized", "hint": "Pass adminToken via ?adminToken=, X-Admin-Token header, or JSON body. Get it from POST /poker/create."}), 403
     data = request.get_json(silent=True) or {}
     ordered_ids = data.get("ids", [])
     if not ordered_ids:
@@ -141,7 +233,7 @@ def api_activate_ticket(room_id, ticket_uuid):
     if not room_data:
         return jsonify({"error": "Room not found"}), 404
     if not _check_admin(room_data):
-        return jsonify({"error": "Unauthorized"}), 403
+        return jsonify({"error": "Unauthorized", "hint": "Pass adminToken via ?adminToken=, X-Admin-Token header, or JSON body. Get it from POST /poker/create."}), 403
     room_data = db.set_active_ticket(room_id, ticket_uuid)
     if not room_data:
         return jsonify({"error": "Ticket not found"}), 404
