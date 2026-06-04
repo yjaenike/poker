@@ -46,6 +46,7 @@ def create_room(room_id: str, admin_token: str) -> dict:
         "id": room_id,
         "adminToken": admin_token,
         "revealed": False,
+        "chatEnabled": True,
         "createdAt": datetime.now(timezone.utc).isoformat(),
         "participants": {},
         "tickets": [],

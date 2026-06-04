@@ -28,6 +28,7 @@ def _safe_room(room: dict, show_votes: bool) -> dict:
     return {
         "id": room["id"],
         "revealed": room["revealed"],
+        "chatEnabled": room.get("chatEnabled", True),
         "participants": participants,
         "tickets": room.get("tickets", []),
     }
@@ -198,6 +199,19 @@ def init_poker_socketio(socketio):
         if room:
             emit("room_state", _safe_room(room, show_votes=room["revealed"]), to=room_id)
 
+    @socketio.on("chat_message")
+    def on_chat(data):
+        room_id = data.get("roomId")
+        text = (data.get("text") or "").strip()
+        if not room_id or not text:
+            return
+        room = db.get_room(room_id)
+        if not room or not room.get("chatEnabled", True):
+            return
+        participant = room["participants"].get(request.sid)
+        name = participant["name"] if participant else "Guest"
+        socketio.emit("chat_message", {"name": name, "text": text}, to=room_id)
+
     @socketio.on("kick_participant")
     def on_kick(data):
         room_id = data.get("roomId")
@@ -214,6 +228,19 @@ def init_poker_socketio(socketio):
         socketio.emit("kicked", {}, to=target_sid)
         if room:
             emit("room_state", _safe_room(room, show_votes=room["revealed"]), to=room_id)
+
+    @socketio.on("toggle_chat")
+    def on_toggle_chat(data):
+        room_id = data.get("roomId")
+        admin_token = data.get("adminToken")
+
+        room = db.get_room(room_id)
+        if not room or room["adminToken"] != admin_token:
+            return
+
+        room["chatEnabled"] = not room.get("chatEnabled", True)
+        db.save_room(room)
+        socketio.emit("chat_toggled", {"enabled": room["chatEnabled"]}, to=room_id)
 
     @socketio.on("disconnect")
     def on_disconnect():
