@@ -422,7 +422,97 @@
       justify-content: center;
       z-index: 50;
     }
+
+    body { transition: background-color 0.3s ease; }
+
+    /* ── Dark mode ─────────────────────────────────────────────────────────── */
+    html.dark {
+      --cream:          #0E0C0B;
+      --cream-soft:     #131110;
+      --cream-warm:     #1A1714;
+      --espresso:       #E8E2DA;
+      --espresso-mid:   #C4B0A0;
+      --text-primary:   #E8E2DA;
+      --text-secondary: #9A8878;
+      --text-muted:     #6A5A52;
+      --surface:        rgba(255,255,255,0.05);
+      --surface-raised: rgba(255,255,255,0.07);
+      --surface-border: rgba(255,255,255,0.07);
+      --shadow-sm:      0 2px 8px rgba(0,0,0,0.5);
+      --shadow-md:      0 8px 32px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.03) inset;
+      --shadow-lg:      0 20px 52px rgba(0,0,0,0.65), 0 1px 0 rgba(255,255,255,0.03) inset;
+    }
+    html.dark body {
+      background-image:
+        radial-gradient(ellipse 80% 60% at 12% 4%,  rgba(196,122,58,0.04) 0%, transparent 60%),
+        radial-gradient(ellipse 55% 50% at 88% 96%, rgba(80,50,30,0.04) 0%, transparent 55%);
+    }
+    html.dark .input-field {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.09);
+      color: var(--text-primary);
+    }
+    html.dark .input-field::placeholder { color: var(--text-muted); }
+    html.dark .btn-secondary {
+      background: rgba(255,255,255,0.07);
+      color: var(--text-primary);
+      border-color: rgba(255,255,255,0.09);
+    }
+    html.dark .btn-secondary:hover { background: rgba(255,255,255,0.11); }
+    html.dark .poker-card {
+      background: #1C1916;
+      border-color: rgba(255,255,255,0.09);
+      color: var(--text-primary);
+    }
+    html.dark .poker-card::before {
+      background: linear-gradient(140deg, rgba(255,255,255,0.05) 0%, transparent 52%);
+    }
+    html.dark .p-card::before {
+      background: linear-gradient(140deg, rgba(255,255,255,0.05) 0%, transparent 50%);
+    }
+    html.dark .p-card-voted::before { display: none; }
+    html.dark .p-card-waiting {
+      background: linear-gradient(145deg, #252220 0%, #1C1916 100%);
+      border-color: rgba(255,255,255,0.06);
+    }
+    html.dark .p-card-waiting::after { color: rgba(255,255,255,0.08); }
+    html.dark .p-card-revealed {
+      background: #F5EFE6;
+      border-color: rgba(255,255,255,0.1);
+    }
+    html.dark .ticket-item {
+      background: rgba(255,255,255,0.03);
+      border-color: rgba(255,255,255,0.07);
+    }
+    html.dark .ticket-item:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.12);
+    }
+    html.dark .share-link { background: rgba(255,255,255,0.07); }
+    html.dark .share-link:hover { background: rgba(255,255,255,0.11); }
+    html.dark .btn-primary { background: #2A2420; color: #E8E2DA; }
+    html.dark .btn-primary:hover { background: #3A3028; }
+    html.dark .p-card-revealed { color: #2C1810; }
+    html.dark .results-number { color: var(--text-primary); }
+
+    .dark-toggle {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0.25rem;
+      opacity: 0.65;
+      transition: opacity 0.18s;
+      flex-shrink: 0;
+    }
+    .dark-toggle:hover { opacity: 1; }
   </style>
+  <script>
+    (function() {
+      if (localStorage.getItem('poker_dark') === '1') document.documentElement.classList.add('dark');
+    })();
+  </script>
 </head>
 <body>
   <header style="
@@ -436,16 +526,31 @@
   ">
     <div style="padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:54px;">
       <div style="display:flex;align-items:center;gap:0.75rem;">
-        <span style="font-size:1.125rem;line-height:1;">&#x2665;&#xFE0F;</span>
+        <span id="header-heart" style="font-size:1.125rem;line-height:1;">&#x2665;&#xFE0F;</span>
         <a href="/poker"
           style="font-family:'Bricolage Grotesque','DM Sans',sans-serif;font-size:1rem;font-weight:600;color:#F5EFE6;letter-spacing:0.01em;text-decoration:none;transition:opacity 0.2s;"
           onmouseover="this.style.opacity='0.65'"
           onmouseout="this.style.opacity='1'"
         >Planning Poker</a>
       </div>
-      {% block navbar_right %}{% endblock %}
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        {% block navbar_right %}{% endblock %}
+        <button class="dark-toggle" onclick="toggleDark()" id="dark-toggle-btn" title="Toggle dark mode">🌙</button>
+      </div>
     </div>
   </header>
+  <script>
+    function applyDarkUI(isDark) {
+      document.getElementById('dark-toggle-btn').textContent = isDark ? '☀️' : '🌙';
+      document.getElementById('header-heart').textContent    = isDark ? '🖤' : '♥️';
+    }
+    function toggleDark() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('poker_dark', isDark ? '1' : '0');
+      applyDarkUI(isDark);
+    }
+    applyDarkUI(document.documentElement.classList.contains('dark'));
+  </script>
 
   <main style="padding:2.5rem 1.5rem;">
     {% block content %}{% endblock %}
