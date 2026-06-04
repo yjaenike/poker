@@ -1,0 +1,161 @@
+{% extends "poker/base.html" %}
+{% block title %}Planning Poker{% endblock %}
+
+{% block content %}
+<div style="
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 120px);
+  padding: 2rem 0;
+">
+
+  <!-- Hero -->
+  <div style="text-align:center;margin-bottom:3.25rem;">
+    <div style="display:flex;justify-content:center;gap:1.125rem;margin-bottom:1.625rem;font-size:1.125rem;letter-spacing:0.2em;">
+      <span style="color:var(--espresso);opacity:0.25;">&#9824;</span>
+      <span style="color:var(--amber);opacity:0.55;">&#9830;</span>
+      <span style="color:var(--espresso);opacity:0.25;">&#9827;</span>
+      <span style="color:var(--amber);opacity:0.55;">&#9829;</span>
+    </div>
+    <h1 class="font-display" style="
+      font-size: clamp(2.25rem, 5vw, 3.5rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--espresso);
+      line-height: 1.04;
+      margin-bottom: 0.75rem;
+    ">Planning Poker</h1>
+    <p style="font-size:1.0625rem;color:var(--text-secondary);font-weight:300;letter-spacing:0.01em;">
+      Estimate together. Reveal at once.
+    </p>
+  </div>
+
+  <!-- Panels -->
+  <div style="display:flex;gap:1.25rem;width:100%;max-width:620px;flex-wrap:wrap;">
+
+    <!-- Create Room -->
+    <div class="glass-raised" style="flex:1;min-width:268px;border-radius:var(--radius-panel);padding:2rem;">
+      <div style="margin-bottom:1.5rem;">
+        <p class="section-label" style="margin-bottom:0.4rem;">New session</p>
+        <h2 class="font-display" style="font-size:1.875rem;font-weight:600;color:var(--espresso);line-height:1.1;">
+          Create a Room
+        </h2>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.75rem;">
+        <input
+          id="create-name"
+          type="text"
+          placeholder="Your name"
+          maxlength="40"
+          class="input-field"
+          onkeydown="if(event.key==='Enter') createRoom()"
+        />
+        <button onclick="createRoom()" class="btn btn-primary" style="width:100%;">
+          Create Room
+        </button>
+      </div>
+    </div>
+
+    <!-- Join Room -->
+    <div class="glass" style="flex:1;min-width:268px;border-radius:var(--radius-panel);padding:2rem;">
+      <div style="margin-bottom:1.5rem;">
+        <p class="section-label" style="margin-bottom:0.4rem;">Have a code?</p>
+        <h2 class="font-display" style="font-size:1.875rem;font-weight:600;color:var(--espresso);line-height:1.1;">
+          Join a Room
+        </h2>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.75rem;">
+        <input
+          id="join-code"
+          type="text"
+          placeholder="K7X2PM"
+          maxlength="6"
+          class="input-field font-mono uc"
+          style="letter-spacing:0.15em;"
+          onkeydown="if(event.key==='Enter') document.getElementById('join-name').focus()"
+        />
+        <input
+          id="join-name"
+          type="text"
+          placeholder="Your name"
+          maxlength="40"
+          class="input-field"
+          onkeydown="if(event.key==='Enter') joinRoom()"
+        />
+        <button onclick="joinRoom()" class="btn btn-secondary" style="width:100%;">
+          Join Room
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Recent Rooms -->
+  <div id="recent-section" class="hidden" style="width:100%;max-width:620px;margin-top:1.25rem;">
+    <div class="glass" style="border-radius:var(--radius-panel);padding:1.5rem 2rem;">
+      <p class="section-label" style="margin-bottom:0.75rem;">Recent rooms</p>
+      <div id="recent-list" style="display:flex;flex-wrap:wrap;gap:0.5rem;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function getRecentRooms() {
+    try { return JSON.parse(localStorage.getItem('poker_recent_rooms') || '[]'); }
+    catch { return []; }
+  }
+
+  function saveRecentRoom(roomId) {
+    let recent = getRecentRooms().filter(r => r !== roomId);
+    recent.unshift(roomId);
+    if (recent.length > 10) recent = recent.slice(0, 10);
+    localStorage.setItem('poker_recent_rooms', JSON.stringify(recent));
+  }
+
+  function renderRecentRooms() {
+    const rooms = getRecentRooms();
+    if (!rooms.length) return;
+    document.getElementById('recent-section').classList.remove('hidden');
+    const list = document.getElementById('recent-list');
+    rooms.forEach(id => {
+      const a = document.createElement('a');
+      a.href = `/poker/room/${id}`;
+      a.textContent = id;
+      a.className = 'room-code-badge';
+      a.style.cssText = 'text-decoration:none;cursor:pointer;transition:transform 0.15s ease,box-shadow 0.15s ease;';
+      a.onmouseover = () => { a.style.transform = 'translateY(-2px)'; a.style.boxShadow = '0 4px 12px rgba(196,122,58,0.2)'; };
+      a.onmouseout = () => { a.style.transform = ''; a.style.boxShadow = ''; };
+      list.appendChild(a);
+    });
+  }
+
+  renderRecentRooms();
+
+  async function createRoom() {
+    const name = document.getElementById('create-name').value.trim();
+    if (!name) { alert('Enter your name first.'); return; }
+
+    const res = await fetch('/poker/create', { method: 'POST' });
+    const { roomId, adminToken } = await res.json();
+
+    localStorage.setItem(`adminToken_${roomId}`, adminToken);
+    localStorage.setItem(`name_${roomId}`, name);
+    saveRecentRoom(roomId);
+    window.location.href = `/poker/room/${roomId}`;
+  }
+
+  function joinRoom() {
+    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    const name = document.getElementById('join-name').value.trim();
+    if (!code) { alert('Enter a room code.'); return; }
+    if (!name) { alert('Enter your name.'); return; }
+
+    localStorage.setItem(`name_${code}`, name);
+    saveRecentRoom(code);
+    window.location.href = `/poker/room/${code}`;
+  }
+</script>
+{% endblock %}

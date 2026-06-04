@@ -1,0 +1,528 @@
+{% extends "poker/base.html" %}
+{% block title %}Room {{ room_id }} — Planning Poker{% endblock %}
+
+{% block navbar_right %}
+<div style="display:flex;align-items:center;gap:0.625rem;flex-wrap:wrap;">
+  <span style="font-size:0.8125rem;font-weight:500;color:rgba(245,239,230,0.6);">Room</span>
+  <span class="room-code-badge" style="font-size:0.8125rem;padding:0.15rem 0.5rem;">{{ room_id }}</span>
+  <span style="font-size:0.6875rem;color:rgba(245,239,230,0.45);">Share:</span>
+  <span id="share-url" class="share-link" style="color:rgba(245,239,230,0.7);background:rgba(255,255,255,0.1);" onclick="copyLink(this)"></span>
+  <span id="copy-confirm" class="hidden" style="font-size:0.75rem;font-weight:500;color:#7EC87E;">Copied!</span>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Name entry modal -->
+<div id="name-modal" class="modal-backdrop hidden">
+  <div class="glass-raised" style="border-radius:var(--radius-panel);padding:2.5rem;width:100%;max-width:360px;margin:1rem;">
+    <h2 class="font-display" style="font-size:1.875rem;font-weight:600;color:var(--espresso);margin-bottom:1.25rem;">
+      What's your name?
+    </h2>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+      <input
+        id="modal-name-input"
+        type="text"
+        placeholder="Enter your name"
+        maxlength="40"
+        class="input-field"
+        onkeydown="if(event.key==='Enter') confirmName()"
+      />
+      <button onclick="confirmName()" class="btn btn-primary" style="width:100%;">
+        Join Room
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Two-column layout -->
+<div style="display:flex;align-items:stretch;min-height:calc(100vh - 54px - 5rem);">
+
+  <!-- Left spacer -->
+  <div style="flex:1;"></div>
+
+  <!-- Centre: main poker area -->
+  <div style="flex:0 1 720px;min-width:0;display:flex;flex-direction:column;">
+
+    <!-- Middle: participants + results, vertically centred -->
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:2.25rem;align-items:center;">
+
+      <!-- Admin controls -->
+      <div id="admin-controls" class="hidden" style="display:flex;gap:0.625rem;align-items:center;flex-wrap:wrap;justify-content:center;">
+        <button id="btn-reveal" onclick="revealCards()" class="btn btn-amber">
+          Reveal Cards
+        </button>
+        <div id="reveal-confirm" class="hidden" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+          <span style="font-size:0.8125rem;color:var(--text-secondary);">Not everyone voted —</span>
+          <button onclick="confirmReveal()" class="btn btn-amber btn-sm">Reveal anyway</button>
+          <button onclick="cancelReveal()" class="btn btn-secondary btn-sm">Cancel</button>
+        </div>
+        <button id="btn-reset" onclick="resetRound()" class="btn btn-secondary hidden">
+          New Round
+        </button>
+      </div>
+
+      <!-- Participants -->
+      <div>
+        <div id="participants" style="display:flex;flex-wrap:wrap;gap:1.25rem;justify-content:center;"></div>
+      </div>
+
+      <!-- Results (always in layout, visibility toggles to prevent jumping) -->
+      <div id="results-section" style="visibility:hidden;text-align:center;">
+        <p class="section-label" style="margin-bottom:1rem;">Results</p>
+        <div class="glass" style="
+          border-radius: 16px;
+          padding: 1.5rem 2rem;
+          display: inline-flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        ">
+          <span style="font-size:0.6875rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);">Average</span>
+          <div id="results-avg" class="results-number">&nbsp;</div>
+          <div id="results-note" style="font-size:0.9375rem;color:var(--text-secondary);font-weight:400;margin-top:0.125rem;">&nbsp;</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Card picker: pinned to bottom -->
+    <div id="card-section" style="padding-top:2.25rem;">
+      {% set suits = ['♠', '♥', '♦', '♣'] %}
+      <div style="display:flex;flex-wrap:wrap;gap:0.75rem;justify-content:center;">
+        {% for val in fibonacci %}
+        {% set suit = suits[loop.index0 % 4] %}
+        <button
+          class="poker-card card-btn"
+          data-value="{{ val }}"
+          onclick="castVote('{{ val }}')"
+        >
+          <span class="card-corner card-tl">
+            <span class="card-cv">{{ val }}</span>
+            <span class="card-cs">{{ suit }}</span>
+          </span>
+          <span class="card-main">{{ val }}</span>
+          <span class="card-corner card-br">
+            <span class="card-cv">{{ val }}</span>
+            <span class="card-cs">{{ suit }}</span>
+          </span>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right spacer -->
+  <div style="flex:1;"></div>
+
+  <!-- Right: ticket queue -->
+  <div style="width:296px;flex-shrink:0;">
+    <div class="glass" style="border-radius:var(--radius-panel);padding:1.5rem;display:flex;flex-direction:column;gap:1rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <p class="section-label">Ticket Queue</p>
+        <button id="ticket-edit-toggle" onclick="toggleTicketEdit()" class="btn btn-secondary" style="font-size:0.6875rem;padding:0.25rem 0.75rem;line-height:1.4;">Edit</button>
+      </div>
+
+      <!-- Add ticket form (edit mode only) -->
+      <div id="add-ticket-form" class="hidden" style="display:flex;flex-direction:column;gap:0.5rem;">
+        <input
+          id="ticket-id-input"
+          type="text"
+          placeholder="ANALYTICS-1234 or Jira URL"
+          maxlength="200"
+          class="input-field input-sm font-mono uc"
+          style="letter-spacing:0.06em;"
+          oninput="stripJiraUrl(this)"
+          onkeydown="if(event.key==='Enter') document.getElementById('ticket-title-input').focus()"
+        />
+        <input
+          id="ticket-title-input"
+          type="text"
+          placeholder="Ticket title (optional)"
+          maxlength="120"
+          class="input-field input-sm"
+          onkeydown="if(event.key==='Enter') addTicket()"
+        />
+        <button onclick="addTicket()" class="btn btn-primary btn-sm" style="width:100%;">
+          Add Ticket
+        </button>
+      </div>
+
+      <!-- Ticket list -->
+      <ul id="ticket-list" style="display:flex;flex-direction:column;gap:0.5rem;list-style:none;">
+        <li id="ticket-empty" style="font-size:0.875rem;color:var(--text-muted);text-align:center;padding:1.5rem 0;">
+          No tickets yet.
+        </li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+  const ROOM_ID = {{ room_id | tojson }};
+  const adminToken = localStorage.getItem(`adminToken_${ROOM_ID}`) || null;
+  let myName = localStorage.getItem(`name_${ROOM_ID}`) || '';
+  let myVote = null;
+  let isRevealed = false;
+  let mySid = null;
+  let lastParticipants = {};
+
+  document.getElementById('share-url').textContent = window.location.href;
+
+  function copyLink(el) {
+    navigator.clipboard.writeText(window.location.href);
+    const confirm = document.getElementById('copy-confirm');
+    confirm.classList.remove('hidden');
+    setTimeout(() => confirm.classList.add('hidden'), 2000);
+  }
+
+  const socket = io({ autoConnect: false });
+
+  if (!myName) {
+    document.getElementById('name-modal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('modal-name-input').focus(), 50);
+  } else {
+    socket.connect();
+  }
+
+  function confirmName() {
+    const input = document.getElementById('modal-name-input').value.trim();
+    if (!input) return;
+    myName = input;
+    localStorage.setItem(`name_${ROOM_ID}`, myName);
+    document.getElementById('name-modal').classList.add('hidden');
+    socket.connect();
+  }
+
+  function promptRename() {
+    const input = prompt('Enter your new name:', myName);
+    if (!input || !input.trim() || input.trim() === myName) return;
+    myName = input.trim();
+    localStorage.setItem(`name_${ROOM_ID}`, myName);
+    socket.emit('rename', { roomId: ROOM_ID, name: myName });
+  }
+
+  socket.on('connect', () => {
+    mySid = socket.id;
+    socket.emit('join_room', { roomId: ROOM_ID, name: myName, adminToken });
+  });
+
+  socket.on('error', (data) => {
+    alert(data.message);
+    window.location.href = '/poker';
+  });
+
+  socket.on('room_state', renderRoom);
+  socket.on('cards_revealed', renderRoom);
+  socket.on('round_reset', (room) => {
+    myVote = null;
+    cancelReveal();
+    renderRoom(room);
+    if (room.newTicket) showToast(`New Ticket: ${room.newTicket.ticketId}`);
+  });
+
+  function showToast(message) {
+    const el = document.createElement('div');
+    el.textContent = message;
+    el.style.cssText = [
+      'position:fixed', 'top:4.5rem', 'right:1.5rem', 'z-index:200',
+      'background:var(--espresso)', 'color:var(--cream-soft)',
+      'padding:0.625rem 1.125rem', 'border-radius:10px',
+      'font-size:0.875rem', 'font-weight:500',
+      'box-shadow:0 8px 24px rgba(44,24,16,0.22)',
+      'opacity:0', 'transition:opacity 0.2s ease',
+    ].join(';');
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.style.opacity = '1');
+    setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 200);
+    }, 3000);
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  function renderRoom(room) {
+    isRevealed = room.revealed;
+    lastParticipants = room.participants;
+    renderParticipants(room.participants);
+    renderAdminControls(room.revealed);
+    renderResults(room.participants, room.revealed);
+    renderTickets(room.tickets || []);
+
+    document.querySelectorAll('.card-btn').forEach(b => {
+      b.disabled = room.revealed;
+    });
+
+    highlightMyCard(room.revealed ? null : myVote);
+  }
+
+  const SUITS = ['♠', '♥', '♦', '♣'];
+
+  function makeCorner(value, suit) {
+    const c = document.createElement('span');
+    c.className = 'card-corner';
+    c.innerHTML = `<span class="card-cv">${value}</span><span class="card-cs">${suit}</span>`;
+    return c;
+  }
+
+  function renderParticipants(participants) {
+    const el = document.getElementById('participants');
+    el.innerHTML = '';
+
+    let entries = Object.entries(participants);
+    if (isRevealed) {
+      entries.sort(([, a], [, b]) => {
+        const av = isNaN(Number(a.vote)) ? -Infinity : Number(a.vote);
+        const bv = isNaN(Number(b.vote)) ? -Infinity : Number(b.vote);
+        return bv - av;
+      });
+    }
+
+    let i = 0;
+    for (const [sid, p] of entries) {
+      const isMe = sid === mySid;
+      const suit = SUITS[i++ % 4];
+
+      const slot = document.createElement('div');
+      slot.className = 'participant-slot';
+
+      const face = document.createElement('div');
+      if (isRevealed && p.vote !== null) {
+        face.className = 'p-card p-card-revealed';
+        const tl = makeCorner(p.vote, suit); tl.classList.add('card-tl');
+        const main = document.createElement('span'); main.className = 'card-main'; main.textContent = p.vote;
+        const br = makeCorner(p.vote, suit); br.classList.add('card-br');
+        face.append(tl, main, br);
+      } else if (p.voted) {
+        face.className = 'p-card p-card-voted';
+      } else {
+        face.className = 'p-card p-card-waiting';
+      }
+
+      const nameRow = document.createElement('div');
+      nameRow.className = 'p-name-row';
+
+      const name = document.createElement('span');
+      name.className = 'p-name';
+      name.textContent = (p.isAdmin ? '♟ ' : '') + p.name;
+      nameRow.appendChild(name);
+
+      if (isMe) {
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '✎';
+        editBtn.title = 'Change name';
+        editBtn.className = 'p-edit-btn';
+        editBtn.onclick = promptRename;
+        nameRow.appendChild(editBtn);
+      }
+
+      slot.appendChild(face);
+      slot.appendChild(nameRow);
+      el.appendChild(slot);
+    }
+  }
+
+  function renderAdminControls(revealed) {
+    if (!adminToken) return;
+    const controls = document.getElementById('admin-controls');
+    controls.classList.remove('hidden');
+    controls.style.display = 'flex';
+
+    const btnReveal = document.getElementById('btn-reveal');
+    const btnReset  = document.getElementById('btn-reset');
+
+    if (revealed) {
+      btnReveal.classList.add('hidden');
+      btnReset.classList.remove('hidden');
+    } else {
+      btnReveal.classList.remove('hidden');
+      btnReset.classList.add('hidden');
+    }
+  }
+
+  function renderResults(participants, revealed) {
+    const section = document.getElementById('results-section');
+    if (!revealed) { section.style.visibility = 'hidden'; return; }
+
+    const votes = Object.values(participants)
+      .map(p => p.vote)
+      .filter(v => v !== null && !isNaN(Number(v)))
+      .map(Number);
+
+    section.style.visibility = 'visible';
+    const avgEl  = document.getElementById('results-avg');
+    const noteEl = document.getElementById('results-note');
+
+    if (votes.length === 0) {
+      avgEl.textContent  = 'N/A';
+      noteEl.textContent = 'No numeric votes';
+      return;
+    }
+
+    const avg = votes.reduce((a, b) => a + b, 0) / votes.length;
+    avgEl.textContent  = avg.toFixed(1);
+
+    const allSame = votes.every(v => v === votes[0]);
+    noteEl.textContent = allSame
+      ? '🎉 Perfect consensus!'
+      : `Range: ${Math.min(...votes)} – ${Math.max(...votes)}`;
+  }
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+
+  function castVote(value) {
+    if (isRevealed) return;
+    const deselecting = myVote === value;
+    myVote = deselecting ? null : value;
+    socket.emit('vote', { roomId: ROOM_ID, vote: myVote });
+    highlightMyCard(myVote);
+  }
+
+  function highlightMyCard(value) {
+    document.querySelectorAll('.card-btn').forEach(b => {
+      if (b.dataset.value === String(value)) {
+        b.classList.add('card-selected');
+      } else {
+        b.classList.remove('card-selected');
+      }
+    });
+  }
+
+  function revealCards() {
+    const all = Object.values(lastParticipants);
+    const allVoted = all.length > 0 && all.every(p => p.voted);
+    if (!allVoted) {
+      document.getElementById('btn-reveal').classList.add('hidden');
+      const el = document.getElementById('reveal-confirm');
+      el.classList.remove('hidden');
+      el.style.display = 'flex';
+      return;
+    }
+    socket.emit('reveal', { roomId: ROOM_ID, adminToken });
+  }
+
+  function confirmReveal() {
+    cancelReveal();
+    socket.emit('reveal', { roomId: ROOM_ID, adminToken });
+  }
+
+  function cancelReveal() {
+    document.getElementById('btn-reveal').classList.remove('hidden');
+    document.getElementById('reveal-confirm').classList.add('hidden');
+  }
+
+  function resetRound() {
+    socket.emit('reset_round', { roomId: ROOM_ID, adminToken });
+  }
+
+  // ── Tickets ───────────────────────────────────────────────────────────────
+
+  let ticketEditMode = false;
+
+  function toggleTicketEdit() {
+    ticketEditMode = !ticketEditMode;
+    applyTicketEditMode();
+  }
+
+  function applyTicketEditMode() {
+    const btn  = document.getElementById('ticket-edit-toggle');
+    const form = document.getElementById('add-ticket-form');
+    const list = document.getElementById('ticket-list');
+    btn.textContent = ticketEditMode ? 'Done' : 'Edit';
+    if (ticketEditMode) {
+      form.classList.remove('hidden');
+      form.style.display = 'flex';
+      list.classList.add('edit-mode');
+    } else {
+      form.classList.add('hidden');
+      list.classList.remove('edit-mode');
+    }
+  }
+
+  function renderTickets(tickets) {
+    applyTicketEditMode();
+
+    const list  = document.getElementById('ticket-list');
+    const empty = document.getElementById('ticket-empty');
+    list.innerHTML = '';
+
+    if (!tickets || tickets.length === 0) {
+      list.appendChild(empty);
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    tickets.forEach(t => {
+      const jiraUrl = `https://tchibo.atlassian.net/browse/${t.ticketId}`;
+      const li = document.createElement('li');
+      li.className = 'ticket-item' + (t.active ? ' ticket-active' : '');
+      li.title   = t.active ? 'Click to deselect' : 'Click to set as active';
+      li.onclick = () => setActiveTicket(t.active ? null : t.id);
+
+      const top = document.createElement('div');
+      top.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:0.5rem;';
+
+      const link = document.createElement('a');
+      link.href      = jiraUrl;
+      link.target    = '_blank';
+      link.rel       = 'noopener noreferrer';
+      link.className = 'ticket-id';
+      link.textContent = t.ticketId;
+      link.onclick   = e => e.stopPropagation();
+      top.appendChild(link);
+
+      const del = document.createElement('button');
+      del.textContent = '×';
+      del.title       = 'Remove ticket';
+      del.className   = 'ticket-remove-btn';
+      del.onclick     = e => { e.stopPropagation(); removeTicket(t.id); };
+      top.appendChild(del);
+
+      const title = document.createElement('span');
+      title.className   = 'ticket-title-text';
+      title.textContent = t.title;
+
+      li.appendChild(top);
+      li.appendChild(title);
+
+      if (t.active) {
+        const badge = document.createElement('span');
+        badge.className   = 'ticket-badge';
+        badge.textContent = 'Estimating';
+        li.appendChild(badge);
+      }
+
+      list.appendChild(li);
+    });
+  }
+
+  function stripJiraUrl(input) {
+    const match = input.value.match(/\/browse\/([A-Z0-9]+-\d+)/i);
+    if (match) input.value = match[1].toUpperCase();
+  }
+
+  function addTicket() {
+    const raw      = document.getElementById('ticket-id-input').value.trim();
+    const urlMatch = raw.match(/\/browse\/([A-Z0-9]+-\d+)/i);
+    const base     = (urlMatch ? urlMatch[1] : raw).toUpperCase();
+    const ticketId = /^\d+$/.test(base) ? `ANALYTICS-${base}` : base;
+    const title    = document.getElementById('ticket-title-input').value.trim();
+    if (!ticketId) return;
+    socket.emit('add_ticket', { roomId: ROOM_ID, ticketId, title });
+    document.getElementById('ticket-id-input').value    = '';
+    document.getElementById('ticket-title-input').value = '';
+    document.getElementById('ticket-id-input').focus();
+  }
+
+  function removeTicket(id) {
+    socket.emit('remove_ticket', { roomId: ROOM_ID, id });
+  }
+
+  function setActiveTicket(id) {
+    socket.emit('set_active_ticket', { roomId: ROOM_ID, id });
+  }
+</script>
+{% endblock %}

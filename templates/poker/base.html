@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Planning Poker{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,600;12..96,700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream:          #F5EFE6;
+      --cream-soft:     #FBF7F2;
+      --cream-warm:     #EDE4D7;
+      --espresso:       #2C1810;
+      --espresso-mid:   #6B4226;
+      --espresso-light: #A07558;
+      --amber:          #C47A3A;
+      --amber-glow:     rgba(196,122,58,0.18);
+      --amber-border:   rgba(196,122,58,0.28);
+      --warm-gray:      #9E8878;
+      --text-primary:   #2C1810;
+      --text-secondary: #7A5C4A;
+      --text-muted:     #B09480;
+      --surface:        rgba(255,255,255,0.72);
+      --surface-raised: rgba(255,255,255,0.82);
+      --surface-border: rgba(255,255,255,0.55);
+      --glass-blur:     blur(24px) saturate(180%);
+      --shadow-sm:      0 2px 8px rgba(44,24,16,0.07);
+      --shadow-md:      0 8px 32px rgba(44,24,16,0.10), 0 1px 0 rgba(255,255,255,0.9) inset;
+      --shadow-lg:      0 20px 52px rgba(44,24,16,0.14), 0 1px 0 rgba(255,255,255,0.9) inset;
+      --radius-card:    10px;
+      --radius-panel:   18px;
+      --radius-pill:    100px;
+    }
+
+    .hidden { display: none !important; }
+
+    body {
+      background-color: var(--cream);
+      background-image:
+        radial-gradient(ellipse 80% 60% at 12% 4%,  rgba(196,122,58,0.09) 0%, transparent 60%),
+        radial-gradient(ellipse 55% 50% at 88% 96%, rgba(107,66,38,0.08) 0%, transparent 55%),
+        radial-gradient(ellipse 35% 40% at 92% 12%, rgba(196,122,58,0.06) 0%, transparent 40%);
+      min-height: 100vh;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .glass {
+      background: var(--surface);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--surface-border);
+      box-shadow: var(--shadow-md);
+    }
+    .glass-raised {
+      background: var(--surface-raised);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--surface-border);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .font-display { font-family: 'Bricolage Grotesque', 'DM Sans', sans-serif; }
+    .font-mono    { font-family: 'JetBrains Mono', monospace; }
+
+    .section-label {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .input-field {
+      width: 100%;
+      background: rgba(255,255,255,0.88);
+      border: 1.5px solid rgba(44,24,16,0.11);
+      border-radius: 12px;
+      padding: 0.6875rem 1rem;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9375rem;
+      color: var(--espresso);
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .input-field:focus {
+      border-color: var(--amber);
+      box-shadow: 0 0 0 3.5px rgba(196,122,58,0.14);
+    }
+    .input-field::placeholder { color: var(--text-muted); }
+    .input-field.uc { text-transform: uppercase; letter-spacing: 0.08em; }
+
+    .input-sm {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8125rem;
+      border-radius: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.375rem;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      font-size: 0.9375rem;
+      line-height: 1;
+      padding: 0.6875rem 1.5rem;
+      border-radius: var(--radius-pill);
+      border: none;
+      cursor: pointer;
+      white-space: nowrap;
+      letter-spacing: 0.01em;
+      transition: background 0.18s ease, transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.18s ease;
+    }
+    .btn:active { transform: translateY(0) scale(0.98) !important; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+    .btn-primary {
+      background: var(--espresso);
+      color: var(--cream-soft);
+    }
+    .btn-primary:hover {
+      background: var(--espresso-mid);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(44,24,16,0.24);
+    }
+
+    .btn-amber {
+      background: var(--amber);
+      color: #fff;
+    }
+    .btn-amber:hover {
+      background: #B36C2E;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(196,122,58,0.34);
+    }
+
+    .btn-secondary {
+      background: rgba(44,24,16,0.07);
+      color: var(--espresso);
+      border: 1px solid rgba(44,24,16,0.1);
+    }
+    .btn-secondary:hover {
+      background: rgba(44,24,16,0.11);
+      transform: translateY(-1px);
+    }
+
+    .btn-sm { font-size: 0.8125rem; padding: 0.5rem 1.125rem; }
+
+    .poker-card {
+      width: 60px;
+      height: 86px;
+      border-radius: var(--radius-card);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Bricolage Grotesque', 'DM Sans', sans-serif;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      background: white;
+      border: 1.5px solid rgba(44,24,16,0.13);
+      box-shadow: var(--shadow-sm);
+      color: var(--espresso);
+      user-select: none;
+      transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1),
+                  border-color 0.15s ease,
+                  box-shadow 0.22s ease,
+                  background 0.15s ease,
+                  color 0.15s ease;
+    }
+    .poker-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(140deg, rgba(255,255,255,0.7) 0%, transparent 52%);
+      pointer-events: none;
+      z-index: 0;
+      transition: opacity 0.15s ease;
+    }
+    .poker-card:hover:not(:disabled) {
+      border-color: var(--amber);
+      transform: translateY(-8px) scale(1.06);
+      box-shadow: 0 16px 32px rgba(44,24,16,0.14), 0 0 0 1px var(--amber-border);
+    }
+    .poker-card.card-selected {
+      border: 1.5px solid rgba(44,24,16,0.12);
+      background: linear-gradient(150deg, #D4853F 0%, #B06529 100%);
+      color: #FFF4E6;
+      transform: translateY(-10px) scale(1.07);
+      box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+    }
+    .poker-card.card-selected::before { opacity: 0.25; }
+    .poker-card.card-selected .card-corner { color: rgba(255,244,230,0.55); }
+    .poker-card:disabled { cursor: default; }
+
+    .card-corner {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      pointer-events: none;
+      z-index: 1;
+      color: #C0B0A0;
+    }
+    .card-tl { top: 5px; left: 6px; }
+    .card-br { bottom: 5px; right: 6px; transform: rotate(180deg); }
+    .card-cv { font-size: 0.5625rem; font-weight: 700; line-height: 1; display: block; }
+    .card-cs { font-size: 0.4375rem; line-height: 1; display: block; }
+    .card-main {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      position: relative;
+      z-index: 1;
+    }
+
+    .participant-slot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .p-card {
+      width: 56px;
+      height: 80px;
+      border-radius: var(--radius-card);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Bricolage Grotesque', 'DM Sans', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 600;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 3px 14px rgba(44,24,16,0.1);
+      transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .p-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(140deg, rgba(255,255,255,0.2) 0%, transparent 50%);
+      pointer-events: none;
+    }
+    .p-card-waiting {
+      background: linear-gradient(145deg, #DDD5C9 0%, #CFC7BB 100%);
+      border: 1.5px solid rgba(44,24,16,0.07);
+    }
+    .p-card-waiting::after {
+      content: '\2666';
+      font-size: 1.1rem;
+      color: rgba(44,24,16,0.12);
+    }
+    .p-card-voted {
+      background-color: #1A1A1A;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='18'%3E%3Ctext x='1' y='9' font-size='7' fill='%23666666' fill-opacity='.7'%3E%E2%99%A0%3C/text%3E%3Ctext x='13' y='9' font-size='7' fill='%23666666' fill-opacity='.7'%3E%E2%99%A5%3C/text%3E%3Ctext x='7' y='18' font-size='7' fill='%23666666' fill-opacity='.7'%3E%E2%99%A6%3C/text%3E%3Ctext x='19' y='18' font-size='7' fill='%23666666' fill-opacity='.7'%3E%E2%99%A3%3C/text%3E%3C/svg%3E");
+      background-size: 24px 18px;
+      border: 1.5px solid rgba(0,0,0,0.4);
+      color: transparent;
+    }
+    .p-card-revealed {
+      background: white;
+      border: 1.5px solid rgba(44,24,16,0.13);
+      color: var(--espresso);
+      box-shadow: var(--shadow-sm);
+    }
+    .p-card-revealed .card-corner { color: #C0B0A0; }
+
+    .p-name-row { display: flex; align-items: center; gap: 3px; max-width: 80px; }
+    .p-name {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .p-edit-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.625rem;
+      color: var(--warm-gray);
+      opacity: 0.5;
+      padding: 0;
+      flex-shrink: 0;
+      line-height: 1;
+      transition: opacity 0.18s;
+    }
+    .p-edit-btn:hover { opacity: 1; }
+
+    .room-code-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      background: var(--amber-glow);
+      color: var(--amber);
+      padding: 0.2rem 0.6rem;
+      border-radius: 8px;
+      border: 1px solid var(--amber-border);
+      letter-spacing: 0.08em;
+    }
+    .share-link {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6875rem;
+      color: var(--text-secondary);
+      background: rgba(158,136,120,0.12);
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.18s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 260px;
+      display: inline-block;
+    }
+    .share-link:hover { background: rgba(158,136,120,0.22); }
+
+    .ticket-item {
+      border-radius: 10px;
+      border: 1.5px solid rgba(44,24,16,0.09);
+      padding: 0.625rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      cursor: pointer;
+      background: rgba(255,255,255,0.42);
+      transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+    }
+    .ticket-item:hover {
+      border-color: rgba(44,24,16,0.18);
+      background: rgba(255,255,255,0.65);
+    }
+    .ticket-item.ticket-active {
+      border-color: var(--amber);
+      background: rgba(196,122,58,0.06);
+      box-shadow: 0 2px 14px rgba(196,122,58,0.12);
+    }
+    .ticket-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: var(--amber);
+      text-decoration: none;
+    }
+    .ticket-id:hover { text-decoration: underline; }
+    .ticket-title-text {
+      font-size: 0.8125rem;
+      color: var(--text-primary);
+      line-height: 1.4;
+    }
+    .ticket-badge {
+      display: inline-block;
+      font-size: 0.5625rem;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      background: var(--amber);
+      color: #fff;
+      padding: 0.1875rem 0.5rem;
+      border-radius: 100px;
+      margin-top: 0.125rem;
+    }
+    .ticket-remove-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      color: var(--text-muted);
+      transition: color 0.15s;
+      padding: 0;
+      flex-shrink: 0;
+    }
+    .ticket-remove-btn:hover { color: #C4313A; }
+    #ticket-list:not(.edit-mode) .ticket-remove-btn { display: none; }
+
+    .results-number {
+      font-family: 'Bricolage Grotesque', 'DM Sans', sans-serif;
+      font-size: 3.75rem;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      color: var(--espresso);
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(44,24,16,0.48);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+  </style>
+</head>
+<body>
+  <header style="
+    background: rgba(28,12,6,0.93);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  ">
+    <div style="padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:54px;">
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <span style="font-size:1.125rem;line-height:1;">&#x2665;&#xFE0F;</span>
+        <a href="/poker"
+          style="font-family:'Bricolage Grotesque','DM Sans',sans-serif;font-size:1rem;font-weight:600;color:#F5EFE6;letter-spacing:0.01em;text-decoration:none;transition:opacity 0.2s;"
+          onmouseover="this.style.opacity='0.65'"
+          onmouseout="this.style.opacity='1'"
+        >Planning Poker</a>
+      </div>
+      {% block navbar_right %}{% endblock %}
+    </div>
+  </header>
+
+  <main style="padding:2.5rem 1.5rem;">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
